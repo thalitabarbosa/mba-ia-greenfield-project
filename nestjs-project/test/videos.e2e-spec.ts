@@ -5,9 +5,9 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
-import { AuthService } from '../src/auth/auth.service';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
+import { MailService } from '../src/mail/mail.service';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 import { putToPresignedUrl } from '../src/test/storage-test.utils';
 import { generateTestVideo } from '../src/test/video-fixture';
@@ -64,12 +64,12 @@ describe('Videos (e2e)', () => {
   async function loginNewUser(): Promise<string> {
     const email = `videos_e2e_${++userCounter}_${Date.now()}@example.com`;
     const password = 'password123';
-    const mailService = (app.get(AuthService) as any).mailService;
     let token = '';
     jest
-      .spyOn(mailService, 'sendConfirmationEmail')
-      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
+      .spyOn(app.get(MailService), 'sendConfirmationEmail')
+      .mockImplementationOnce((_e: string, _n: string, t: string) => {
         token = t;
+        return Promise.resolve();
       });
     await request(app.getHttpServer())
       .post('/auth/register')

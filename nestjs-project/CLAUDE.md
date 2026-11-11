@@ -13,6 +13,8 @@ docker compose ps   # all services must show status "running"
 Then verify each infrastructure service is actually ready to accept connections — not just running:
 
 - **PostgreSQL:** `docker compose exec db pg_isready -U streamtube` — expect `accepting connections`
+- **Redis:** `docker compose exec redis redis-cli ping` — expect `PONG`
+- **MinIO:** `docker compose exec minio mc ready local` — expect ready; `docker compose ps -a minio-init` must show `Exited (0)` (bucket `streamtube` created)
 
 Only start the NestJS dev server (`npm run start:dev`) when the user **explicitly** asks to run the application — never as part of "start the environment".
 
@@ -32,8 +34,13 @@ docker compose exec nestjs-api npm run start:dev
 ```
 
 Services:
-- `nestjs-api` — NestJS API, port `3000`
+- `nestjs-api` — NestJS API, port `3000` (image includes `ffmpeg`/`ffprobe`, needed by tests)
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `mailpit` — SMTP `1025`, web UI `8025`
+- `redis` — Redis 7 (AOF on), port `6379` — BullMQ broker
+- `minio` — S3-compatible storage, API `9000`, console `9001` (user `streamtube` / `streamtube-secret`)
+- `minio-init` — one-shot `mc` container that creates the `streamtube` bucket, then exits
+- `video-worker` — same image/volume as `nestjs-api`; runs `npm run start:worker` (`src/worker.ts`, no HTTP server). It waits until `node_modules` exists, so run `npm install` in `nestjs-api` first. Logs: `docker compose logs -f video-worker`. Restart it after changing worker code: `docker compose restart video-worker`.
 
 All verification and teardown commands run on the **host machine**:
 
@@ -62,6 +69,7 @@ docker compose down
 npm run start:dev                        # Dev server with hot-reload
 npm run build                            # Compile to dist/
 npm run start:prod                       # Run compiled build
+npm run migration:run                    # Apply migrations (incl. CreateVideos)
 
 npm test                                 # Unit tests
 npm run test:watch                       # Unit tests in watch mode
@@ -155,6 +163,34 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 - **Decorators:** `emitDecoratorMetadata` + `experimentalDecorators` enabled — required for NestJS DI
 - **Prettier:** single quotes, trailing commas everywhere
 - **ESLint:** `no-explicit-any` allowed; `no-floating-promises` and `no-unsafe-argument` are warnings
+
+## Videos Module (Phase 03)
+
+| Path | Responsibility |
+|------|----------------|
+| `src/videos/` | `VideosController` (`/videos`), `VideosService` (upload init/complete/abort, owner-only reads), `VideoProcessingService` (worker-side transitions), `VideoProcessingProducer`, `Video` entity, DTOs |
+| `src/storage/` | `StorageService` — the only S3/MinIO client (multipart, presigned URLs, head/put/delete); internal vs public client |
+| `src/queue/` | `QueueModule` (BullMQ root + `video-processing` queue), job name/options/payload |
+| `src/media/` | `MediaService` — spawns `ffprobe`/`ffmpeg` (no npm wrapper); pure parsers |
+| `src/worker/` + `src/worker.ts` | `WorkerModule` and `VideoProcessor` (`@Processor('video-processing')`) for the `video-worker` container |
+| `src/config/{storage,queue,upload}.config.ts` | `S3_*`, `PRESIGNED_URL_EXPIRATION_SECONDS`, `REDIS_*`, `UPLOAD_MAX_FILE_SIZE`, `UPLOAD_PART_SIZE` (validated in `env.validation.ts`) |
+
+Endpoints (all require a Bearer token; videos opt out of the auth throttler with `@SkipThrottle()`):
+
+| Method | Path | Result |
+|--------|------|--------|
+| POST | `/videos/uploads` | 201 — draft + presigned part URLs |
+| POST | `/videos/:id/upload/complete` | 200 — `processing`, job enqueued |
+| DELETE | `/videos/:id/upload` | 204 — draft aborted |
+| GET | `/videos/:slug` | 200 — details (status, duration, metadata) |
+| GET | `/videos/:slug/stream` · `/download` · `/thumbnail` | 302 — presigned storage URL |
+
+Testing notes:
+
+- Storage, queue and worker tests hit the real Compose services (`*.integration-spec.ts`); fixtures are generated with `ffmpeg` (`src/test/video-fixture.ts`).
+- `src/test/jest-setup-env.ts` (in both Jest configs) forces `S3_PUBLIC_ENDPOINT=http://minio:9000` because `localhost:9000` is unreachable from inside `nestjs-api`.
+- Queue integration tests use a unique BullMQ prefix (`src/test/queue-test.utils.ts`) so the running `video-worker` does not steal their jobs; the full-pipeline e2e (`test/videos.e2e-spec.ts`) relies on the running `video-worker`.
+- `.env` must contain `S3_ACCESS_KEY` and `S3_SECRET_KEY` (Joi-required) — copy the new keys from `.env.example`.
 
 ## REST Conventions
 

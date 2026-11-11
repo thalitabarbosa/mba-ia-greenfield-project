@@ -30,8 +30,9 @@ Deliver video upload of files up to 10GB directly to object storage (presigned S
 - `src/config/upload.config.ts` — `registerAs('upload', ...)`: `maxFileSize` (`UPLOAD_MAX_FILE_SIZE`, default `10737418240`), `partSize` (`UPLOAD_PART_SIZE`, default `67108864`).
 - Extend `env.validation.ts`: `S3_ACCESS_KEY`/`S3_SECRET_KEY` required; the others with the defaults above; `UPLOAD_PART_SIZE` min `5242880`. Register the three factories in `AppModule` `load`. Update `.env.example`.
 - `Dockerfile.dev`: add `ffmpeg` to the `apt install` line.
-- `compose.yaml`: add `minio` (`minio/minio`, `server /data --console-address :9001`, ports 9000/9001, healthcheck, named volume), `minio-init` (`minio/mc`, creates bucket `streamtube` and applies CORS allowing `PUT`/`GET` and exposing `ETag`, exits 0), `redis` (`redis:7-alpine`, `--appendonly yes`, healthcheck `redis-cli ping`), `video-worker` (same build/volume as `nestjs-api`, `command: npm run start:worker`). `nestjs-api` and `video-worker` depend on `db` (healthy), `redis` (healthy), `minio` (healthy), `minio-init` (`service_completed_successfully`).
-- `package.json`: scripts `start:worker` (`nest start --entryFile worker --watch`) and `start:worker:prod` (`node dist/worker`).
+- `compose.yaml`: add `minio` (`minio/minio`, `server /data --console-address :9001`, ports 9000/9001, healthcheck, named volume), `minio-init` (`minio/mc`, creates bucket `streamtube`, exits 0); browser CORS is enabled server-wide on `minio` with `MINIO_API_CORS_ALLOW_ORIGIN=*` (MinIO has no per-bucket CORS API), `redis` (`redis:7-alpine`, `--appendonly yes`, healthcheck `redis-cli ping`), `video-worker` (same build/volume as `nestjs-api`; waits for `node_modules`, then `npm run start:worker`). `nestjs-api` and `video-worker` depend on `db` (healthy), `redis` (healthy), `minio` (healthy), `minio-init` (`service_completed_successfully`).
+- `package.json`: scripts `start:worker` (`ts-node -r tsconfig-paths/register src/worker.ts` — avoids two `nest start --watch` processes deleting the shared `dist/`) and `start:worker:prod` (`node dist/worker`).
+- Jest: add `src/test/jest-setup-env.ts` to `setupFiles` of both configs (forces `S3_PUBLIC_ENDPOINT=http://minio:9000` in tests, TD-02 R1).
 
 **Dependencies:** None
 
@@ -74,7 +75,7 @@ Deliver video upload of files up to 10GB directly to object storage (presigned S
 - `src/videos/entities/video.entity.ts` per Data Model; `src/videos/video-status.enum.ts` (`draft | processing | ready | error`); `src/videos/video-metadata.types.ts` (`VideoMetadata` interface).
 - `src/videos/slug.util.ts` — `generateVideoSlug()`: `randomBytes(8).toString('base64url')` (11 chars, `[A-Za-z0-9_-]`).
 - Migration `src/database/migrations/<timestamp>-CreateVideos.ts` generated with `npm run migration:generate` (enum type, table, unique index on `slug`, index on `channel_id`, FK `channel_id → channels.id ON DELETE CASCADE`).
-- `Channel` entity: add inverse `@OneToMany(() => Video, (v) => v.channel) videos`.
+- Relation is unidirectional (`Video` → `Channel`): an inverse `@OneToMany` on `Channel` would force every existing Phase 02 test DataSource to register `Video`.
 - `src/test/create-test-data-source.ts` → `cleanAllTables` deletes `videos` first (FK order).
 - `src/database/migrations.integration-spec.ts`: include the new migration class.
 
@@ -97,14 +98,14 @@ Deliver video upload of files up to 10GB directly to object storage (presigned S
 - `ChannelsService.findByUserId(userId): Promise<Channel>` (throws `ChannelNotFoundException`) — channel lookup stays in `ChannelsModule`.
 - `src/videos/upload-plan.util.ts` — `planParts(fileSize, partSize): { partSize, partCount }` (rejects `partCount > 10000`).
 - `src/videos/dto/initiate-upload.dto.ts` — `title` (string, 1–100), `fileName` (string, 1–255), `fileSize` (int, 1 … 10737418240), `contentType` (`@IsIn([...ALLOWED_VIDEO_CONTENT_TYPES])`).
-- `VideosService.initiateUpload(userId, dto)`: resolve channel → `id = randomUUID()` → `createMultipartUpload(videoOriginalKey(id))` → insert row (`status=draft`, `upload_id`, slug with retry ≤3 on `23505` for `slug`, SAVEPOINT pattern) → if insert fails, `abortMultipartUpload` and re-throw → presign all part URLs.
+- `VideosService.initiateUpload(userId, dto)`: resolve channel → `id = randomUUID()` → `createMultipartUpload(videoOriginalKey(id))` → insert row (`status=draft`, `upload_id`, slug with retry ≤3 on `23505` for `slug` — single autocommit insert per attempt, so no SAVEPOINT is needed) → if insert fails, `abortMultipartUpload` and re-throw → presign all part URLs.
 - `src/videos/videos.controller.ts` (`@Controller('videos')`, `@ApiTags('videos')`, `@ApiBearerAuth`), `src/videos/videos.module.ts` (imports `TypeOrmModule.forFeature([Video])`, `ChannelsModule`, `StorageModule`), registered in `AppModule`.
 
 **Dependencies:** SI-03.2, SI-03.3
 
 **Acceptance criteria:**
 
-- E2E: authenticated `POST /videos/uploads` for 10 GiB returns `201` with `partCount = 160`, `partSize = 67108864`, 160 URLs, `status = draft`; the DB row exists with `status=draft` and `upload_id` set.
+- E2E (suite runs with `UPLOAD_PART_SIZE=5 MiB`): authenticated `POST /videos/uploads` for 10 GiB returns `201` with one URL per part (`partCount = 2048`), `status = draft`; the DB row exists with `status=draft` and `upload_id` set. Unit: default 64 MiB parts → `partCount = 160`.
 - E2E: `fileSize = 10737418241` → `400 VALIDATION_ERROR`; `contentType = image/png` → `400`; no token → `401`.
 - Unit: `planParts` boundaries (exact multiple, remainder, 1 byte); service aborts the multipart when the insert fails.
 - Integration: slug collision on insert is retried and a different slug is persisted.
@@ -143,7 +144,7 @@ Deliver video upload of files up to 10GB directly to object storage (presigned S
 
 **Acceptance criteria:**
 
-- E2E: init (6 MiB file) → PUT both parts to the presigned URLs (test env `S3_PUBLIC_ENDPOINT=http://minio:9000`) → complete → `200` with `status=processing`; a job with `jobId = videoId` exists in Redis.
+- E2E: init (6 MiB file) → PUT both parts to the presigned URLs (test env `S3_PUBLIC_ENDPOINT=http://minio:9000`) → complete → `200` with `status=processing`; the producer is called with the video id (job shape/idempotency asserted in SI-03.5 against Redis — asserting the job in e2e would race with the running `video-worker`).
 - E2E: complete with a wrong ETag → `422 UPLOAD_PARTS_INVALID`; second complete → `409 VIDEO_INVALID_STATUS`; another user's video → `404 VIDEO_NOT_FOUND`.
 - E2E: declared size ≠ uploaded size → `422 UPLOAD_SIZE_MISMATCH` and DB `status=error`.
 - E2E: `DELETE /videos/:id/upload` on a draft → `204`, row removed; on a `processing` video → `409`.
@@ -202,7 +203,7 @@ Deliver video upload of files up to 10GB directly to object storage (presigned S
 
 - `VideosService.getOwnedBySlug(userId, slug)`; `getStreamUrl`, `getDownloadUrl` (require `ready` → `VideoNotReadyException`; download file name = sanitized title + original extension), `getThumbnailUrl` (require `thumbnail_key`).
 - `src/videos/dto/video-response.dto.ts` — response shape per API Contracts (no storage keys, no `upload_id`).
-- Controller: `GET /videos/:slug`, `GET /videos/:slug/stream`, `GET /videos/:slug/download`, `GET /videos/:slug/thumbnail` using `@Redirect()` / `res.redirect(302, url)`; all authenticated (no `@Public()`).
+- Controller: `GET /videos/:slug`, `GET /videos/:slug/stream`, `GET /videos/:slug/download`, `GET /videos/:slug/thumbnail` using `@Redirect()`; all authenticated (no `@Public()`); controller marked `@SkipThrottle()` because the auth `ThrottlerGuard` is registered globally (`APP_GUARD`).
 
 **Dependencies:** SI-03.4, SI-03.8
 
