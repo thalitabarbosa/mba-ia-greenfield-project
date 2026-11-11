@@ -97,6 +97,7 @@
     "setupFiles": [
       "dotenv/config",
       "<rootDir>/test/jest-setup-env.ts"
-    ]
+    ],
+    "testTimeout": 30000
   }
 }

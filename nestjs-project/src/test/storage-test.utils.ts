@@ -20,7 +20,7 @@ export async function putToPresignedUrl(
   url: string,
   body: Buffer,
 ): Promise<string> {
-  const res = await fetch(url, { method: 'PUT', body });
+  const res = await fetch(url, { method: 'PUT', body: Uint8Array.from(body) });
   if (!res.ok) {
     throw new Error(`PUT failed with ${res.status}: ${await res.text()}`);
   }

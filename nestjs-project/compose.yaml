@@ -24,7 +24,8 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     # Dependencies are installed once from nestjs-api (shared volume); the worker waits for them.
-    command: ["sh", "-c", "until [ -d node_modules/bullmq ]; do echo 'video-worker: waiting for npm install in nestjs-api'; sleep 5; done; npm run start:worker"]
+    command: ["sh", "-c", "until [ -x node_modules/.bin/ts-node ] && [ -d node_modules/bullmq ]; do echo 'video-worker: waiting for npm install in nestjs-api'; sleep 5; done; npm run start:worker"]
+    restart: unless-stopped
     volumes:
       - .:/home/node/app
     depends_on:
