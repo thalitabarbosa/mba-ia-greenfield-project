@@ -13,6 +13,10 @@
 
 > **Why "pending":** the implementation session had no npm registry access and no Docker, so dependencies could not be installed and no test, `tsc` or lint command could run. Each SI below lists the tests written for it. An SI moves to `completed` only after its tests run green inside `nestjs-api` (`docker compose exec nestjs-api npm test -- <files> --runInBand`), following the Definition of Done in `CLAUDE.md`.
 
+### Run 2 — 2026-11-11
+- `tsc` exit 0 · `npm run lint` exit 0 · unit + integration **210/210 (39/39 suites)** · migration check "No changes".
+- e2e **60/61**: only the full-pipeline case failed (`waitFor` timeout) — `video-worker` crashed at `DataSource.initialize` because `WorkerModule` registered only `Video`, not the related `Channel`/`User` entities. Fixed, plus `src/worker/worker.module.integration-spec.ts`, which boots the real `WorkerModule` (the processor tests had registered every entity themselves and hid the gap).
+
 ### SI-03.1 — Dependencies, Configuration Namespaces and Compose Infrastructure
 - **Status:** implemented — pending test run
 - **Tests:** written, not run (`src/config/env.validation.integration-spec.ts`: +3 cases for `S3_ACCESS_KEY` required, `UPLOAD_PART_SIZE` ≥ 5 MiB, defaults)
