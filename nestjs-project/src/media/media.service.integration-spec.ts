@@ -46,8 +46,8 @@ describe('MediaService (integration, real ffmpeg + MinIO)', () => {
   });
 
   it('fails with MediaProcessingError for a non-video file', async () => {
-    await expect(media.probe(await internalUrl(textKey))).rejects.toBeInstanceOf(
-      MediaProcessingError,
-    );
+    await expect(
+      media.probe(await internalUrl(textKey)),
+    ).rejects.toBeInstanceOf(MediaProcessingError);
   });
 });

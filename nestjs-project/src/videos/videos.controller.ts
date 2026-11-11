@@ -39,7 +39,11 @@ const errorSchema = { $ref: getSchemaPath(ApiErrorEnvelope) };
 @SkipThrottle()
 @ApiTags('videos')
 @ApiBearerAuth('access-token')
-@ApiResponse({ status: 401, description: 'Missing or invalid access token', schema: errorSchema })
+@ApiResponse({
+  status: 401,
+  description: 'Missing or invalid access token',
+  schema: errorSchema,
+})
 @Controller('videos')
 export class VideosController {
   constructor(private readonly videosService: VideosService) {}
@@ -51,8 +55,16 @@ export class VideosController {
       'Pre-registers the video as draft and returns one presigned URL per part. The client PUTs each part directly to storage.',
   })
   @ApiResponse({ status: 201, type: InitiateUploadResponseDto })
-  @ApiResponse({ status: 400, description: 'Validation failed', schema: errorSchema })
-  @ApiResponse({ status: 404, description: 'CHANNEL_NOT_FOUND', schema: errorSchema })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed',
+    schema: errorSchema,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'CHANNEL_NOT_FOUND',
+    schema: errorSchema,
+  })
   async initiateUpload(
     @CurrentUser() user: JwtPayload,
     @Body() dto: InitiateUploadDto,
@@ -68,8 +80,16 @@ export class VideosController {
       'Assembles the uploaded parts, verifies the size and enqueues processing.',
   })
   @ApiResponse({ status: 200, type: VideoResponseDto })
-  @ApiResponse({ status: 404, description: 'VIDEO_NOT_FOUND', schema: errorSchema })
-  @ApiResponse({ status: 409, description: 'VIDEO_INVALID_STATUS', schema: errorSchema })
+  @ApiResponse({
+    status: 404,
+    description: 'VIDEO_NOT_FOUND',
+    schema: errorSchema,
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'VIDEO_INVALID_STATUS',
+    schema: errorSchema,
+  })
   @ApiResponse({
     status: 422,
     description: 'UPLOAD_PARTS_INVALID | UPLOAD_SIZE_MISMATCH',
@@ -87,8 +107,16 @@ export class VideosController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Abort a draft upload' })
   @ApiResponse({ status: 204, description: 'Upload aborted and draft removed' })
-  @ApiResponse({ status: 404, description: 'VIDEO_NOT_FOUND', schema: errorSchema })
-  @ApiResponse({ status: 409, description: 'VIDEO_INVALID_STATUS', schema: errorSchema })
+  @ApiResponse({
+    status: 404,
+    description: 'VIDEO_NOT_FOUND',
+    schema: errorSchema,
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'VIDEO_INVALID_STATUS',
+    schema: errorSchema,
+  })
   async abortUpload(
     @CurrentUser() user: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
@@ -99,7 +127,11 @@ export class VideosController {
   @Get(':slug')
   @ApiOperation({ summary: 'Get a video by its unique slug' })
   @ApiResponse({ status: 200, type: VideoResponseDto })
-  @ApiResponse({ status: 404, description: 'VIDEO_NOT_FOUND', schema: errorSchema })
+  @ApiResponse({
+    status: 404,
+    description: 'VIDEO_NOT_FOUND',
+    schema: errorSchema,
+  })
   async getBySlug(
     @CurrentUser() user: JwtPayload,
     @Param('slug') slug: string,
@@ -115,7 +147,11 @@ export class VideosController {
       'Redirects (302) to a short-lived storage URL that supports HTTP Range (206 Partial Content).',
   })
   @ApiResponse({ status: 302, description: 'Location: presigned storage URL' })
-  @ApiResponse({ status: 409, description: 'VIDEO_NOT_READY', schema: errorSchema })
+  @ApiResponse({
+    status: 409,
+    description: 'VIDEO_NOT_READY',
+    schema: errorSchema,
+  })
   async stream(
     @CurrentUser() user: JwtPayload,
     @Param('slug') slug: string,
@@ -131,7 +167,11 @@ export class VideosController {
       'Redirects (302) to a short-lived storage URL served with Content-Disposition: attachment.',
   })
   @ApiResponse({ status: 302, description: 'Location: presigned storage URL' })
-  @ApiResponse({ status: 409, description: 'VIDEO_NOT_READY', schema: errorSchema })
+  @ApiResponse({
+    status: 409,
+    description: 'VIDEO_NOT_READY',
+    schema: errorSchema,
+  })
   async download(
     @CurrentUser() user: JwtPayload,
     @Param('slug') slug: string,
@@ -143,7 +183,11 @@ export class VideosController {
   @Redirect()
   @ApiOperation({ summary: 'Get the generated thumbnail (302 to storage)' })
   @ApiResponse({ status: 302, description: 'Location: presigned storage URL' })
-  @ApiResponse({ status: 404, description: 'THUMBNAIL_NOT_FOUND', schema: errorSchema })
+  @ApiResponse({
+    status: 404,
+    description: 'THUMBNAIL_NOT_FOUND',
+    schema: errorSchema,
+  })
   async thumbnail(
     @CurrentUser() user: JwtPayload,
     @Param('slug') slug: string,

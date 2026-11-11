@@ -35,7 +35,10 @@ export async function cleanAllTables(dataSource: DataSource): Promise<void> {
   await dataSource.query('DELETE FROM "users"');
 }
 
-async function hasTable(dataSource: DataSource, table: string): Promise<boolean> {
+async function hasTable(
+  dataSource: DataSource,
+  table: string,
+): Promise<boolean> {
   const rows = await dataSource.query<{ exists: boolean }[]>(
     `SELECT to_regclass($1) IS NOT NULL AS "exists"`,
     [`public.${table}`],

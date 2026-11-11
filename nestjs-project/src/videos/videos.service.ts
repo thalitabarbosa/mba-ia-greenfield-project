@@ -173,9 +173,7 @@ export class VideosService {
   }
 
   async getDetails(userId: string, slug: string): Promise<VideoResponseDto> {
-    return VideoResponseDto.fromEntity(
-      await this.getOwnedBySlug(userId, slug),
-    );
+    return VideoResponseDto.fromEntity(await this.getOwnedBySlug(userId, slug));
   }
 
   /** Presigned inline URL; storage serves Range/206 (TD-07). */

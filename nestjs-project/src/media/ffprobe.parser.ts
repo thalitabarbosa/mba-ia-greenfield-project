@@ -1,5 +1,8 @@
 import type { VideoMetadata } from '../videos/video-metadata.types';
-import { MediaProcessingError, NO_VIDEO_STREAM } from './media-processing.error';
+import {
+  MediaProcessingError,
+  NO_VIDEO_STREAM,
+} from './media-processing.error';
 
 interface FfprobeStream {
   codec_type?: string;

@@ -51,7 +51,9 @@ describe('envValidationSchema — Phase 03 storage/queue/upload', () => {
   });
 
   it('should reject UPLOAD_PART_SIZE below 5 MiB', () => {
-    const { error } = validate({ UPLOAD_PART_SIZE: String(5 * 1024 * 1024 - 1) });
+    const { error } = validate({
+      UPLOAD_PART_SIZE: String(5 * 1024 * 1024 - 1),
+    });
     expect(error).toBeDefined();
     expect(error!.message).toContain('UPLOAD_PART_SIZE');
   });

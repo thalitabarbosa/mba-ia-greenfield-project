@@ -48,7 +48,11 @@ describe('VideoProcessor (integration, real Redis queue → worker)', () => {
         StorageModule,
         MediaModule,
       ],
-      providers: [VideoProcessingService, VideoProcessor, VideoProcessingProducer],
+      providers: [
+        VideoProcessingService,
+        VideoProcessor,
+        VideoProcessingProducer,
+      ],
     }).compile();
     await moduleRef.init(); // registers the BullMQ Worker for @Processor
     dataSource = moduleRef.get(DataSource);

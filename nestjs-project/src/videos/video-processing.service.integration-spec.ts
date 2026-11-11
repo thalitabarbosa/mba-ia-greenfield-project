@@ -78,7 +78,9 @@ describe('VideoProcessingService (integration, real DB + MinIO + ffmpeg)', () =>
     expect(done.metadata).toMatchObject({ width: 320, height: 240 });
     expect(done.thumbnail_key).toBe(`thumbnails/${video.id}/thumbnail.jpg`);
     expect(done.processed_at).not.toBeNull();
-    await expect(storage.getObjectSize(done.thumbnail_key!)).resolves.toBeGreaterThan(0);
+    await expect(
+      storage.getObjectSize(done.thumbnail_key!),
+    ).resolves.toBeGreaterThan(0);
   });
 
   it('rejects a non-video source and markFailed sets error with a reason', async () => {
@@ -86,7 +88,11 @@ describe('VideoProcessingService (integration, real DB + MinIO + ffmpeg)', () =>
       dataSource,
       await createChannelFixture(dataSource),
     );
-    await storage.putObject(video.storage_key, Buffer.from('nope'), 'video/mp4');
+    await storage.putObject(
+      video.storage_key,
+      Buffer.from('nope'),
+      'video/mp4',
+    );
 
     await expect(service.process(video.id)).rejects.toThrow();
     await service.markFailed(video.id, 'ffprobe exited with 1');
