@@ -46,6 +46,8 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Decision:** A (BullMQ + Redis)
 
+**Libraries:** `@nestjs/bullmq@^11.0.4`, `bullmq@^5.76.0` (pinned below v6 — see library-refs.md)
+
 ---
 
 ## TD-02: Object Storage Usage (bucket, key layout, SDK, endpoints)
@@ -77,6 +79,12 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Decision:** A (single private bucket, id-derived keys, AWS SDK v3, internal + public endpoints)
 
+**Libraries:** `@aws-sdk/client-s3@^3.x`, `@aws-sdk/s3-request-presigner@^3.x`
+
+**Revisions:**
+
+- **R1 (2026-11-11, plan-resolve, fixes validation IC-1 / UQ-2):** URL signing rule made explicit. URLs handed to clients outside Docker (upload part URLs, stream/download/thumbnail redirects) are signed with the **public** client (`S3_PUBLIC_ENDPOINT`). URLs consumed by services inside the Compose network (the worker's ffprobe/ffmpeg input) are signed with the **internal** client (`S3_ENDPOINT`). In the test environment (tests run inside `nestjs-api`), `S3_PUBLIC_ENDPOINT` is set to `http://minio:9000` so the supertest/HTTP client can follow presigned URLs. Option letter unchanged.
+
 ---
 
 ## TD-03: Upload Strategy for Files up to 10GB
@@ -107,6 +115,8 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 **Recommendation:** **Option A** — it is the only option where the API is fully out of the data path, which is literally what "sem impacto na performance" requires; resumability is achieved at part granularity.
 
 **Decision:** A (direct-to-storage S3 multipart upload with presigned part URLs)
+
+**Libraries:** `@aws-sdk/client-s3@^3.x`, `@aws-sdk/s3-request-presigner@^3.x`
 
 ---
 
@@ -164,6 +174,12 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 **Recommendation:** **Option A** — one codebase, a dedicated container, direct FFmpeg CLI calls and HTTP-range reads give a real worker without duplicating the domain or adopting a deprecated wrapper.
 
 **Decision:** A (same codebase, `src/worker.ts` entrypoint, ffprobe/ffmpeg via spawn over presigned GET URL)
+
+**Libraries:** `ffmpeg`/`ffprobe` (Debian `ffmpeg` package in `Dockerfile.dev`)
+
+**Revisions:**
+
+- **R1 (2026-11-11, plan-resolve, fixes validation AM-1):** thumbnail timestamp `t = min(duration × 0.1, 10s)`; `t = 0` when duration < 1s or unknown. Output JPEG scaled to width 640 (`-vf scale=640:-2 -q:v 3`), uploaded to `thumbnails/{videoId}/thumbnail.jpg` with `ContentType: image/jpeg`. Option letter unchanged.
 
 ---
 
@@ -225,6 +241,8 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Decision:** A (302 redirect to short-lived presigned GET URL)
 
+**Libraries:** `@aws-sdk/s3-request-presigner@^3.x`
+
 ---
 
 ## TD-08: Video Status Lifecycle and Failure Handling
@@ -255,6 +273,12 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 **Recommendation:** **Option A** — the complete call already exists in the multipart flow, so it is the natural trigger; ordering (status then enqueue, fail-to-error) plus idempotent job id and conditional worker updates cover the dual-write risk without an outbox.
 
 **Decision:** A (draft → processing → ready | error; complete-triggered; BullMQ retries; idempotent job)
+
+**Libraries:** `bullmq@^5.76.0`
+
+**Revisions:**
+
+- **R1 (2026-11-11, plan-resolve, fixes validation UQ-1):** `status` represents only the upload/processing state (`draft | processing | ready | error`). It does **not** encode publication; Phase 04 owns publication/visibility and will add its own column(s). `draft` here means "pre-registered, upload not completed". Option letter unchanged.
 
 ---
 
@@ -309,6 +333,35 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 ---
 
+## TD-11: Persisted Video Metadata Shape
+
+**Scope:** Backend
+
+**Capability:** Processamento automático do vídeo após upload (extração de duração e metadados)
+
+**Context:** Added by `plan-resolve` to close validation MD-1. The worker extracts metadata with ffprobe; the API returns it; the migration defines it. The shape must be fixed before the Data Model is written.
+
+**Options:**
+
+### Option A: Dedicated `duration_seconds` column + curated `metadata` jsonb
+- `duration_seconds numeric(10,3)` (queryable, sortable later) and `metadata jsonb` with a fixed, documented subset: `{ width, height, videoCodec, audioCodec, bitRate, frameRate, formatName, sizeBytes }` (`audioCodec` nullable).
+- **Pros:** Duration is a first-class field (listing/sorting in Phases 04–05); the JSON subset is stable and typed via a TS interface; no schema change if a new metadata field is added later.
+- **Cons:** jsonb fields are not individually constrained by the DB.
+
+### Option B: One column per metadata field
+- **Pros:** Every field constrained and indexable.
+- **Cons:** Migration per new field; most fields are display-only.
+
+### Option C: Store the raw ffprobe JSON
+- **Pros:** Nothing lost.
+- **Cons:** Large, unstable shape tied to the ffprobe version; leaks internal details through the API.
+
+**Recommendation:** **Option A** — duration as a column plus a curated jsonb subset balances queryability and stability.
+
+**Decision:** A (`duration_seconds` column + curated `metadata` jsonb)
+
+---
+
 ## Decisions Summary
 
 | ID | Scope | Decision | Recommendation | Choice |
@@ -323,3 +376,4 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 | TD-08 | Backend | Status Lifecycle and Failure Handling | A (draft→processing→ready/error, complete-triggered, retries) | A |
 | TD-09 | Backend | Access Policy for Reads in Phase 03 | A (owner-only) | A |
 | TD-10 | Repo-wide | Compose Topology and Env Contract | A (minio + minio-init + redis + video-worker, same image) | A |
+| TD-11 | Backend | Persisted Video Metadata Shape | A (duration column + curated jsonb) | A |

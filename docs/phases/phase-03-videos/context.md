@@ -3,7 +3,7 @@ kind: phase
 name: phase-03-videos
 sources_mtime:
   docs/project-plan.md: "2026-11-11T08:40:00-03:00"
-  docs/decisions/technical-decisions-phase-03-videos.md: "2026-11-11T09:05:00-03:00"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-11-11T09:20:00-03:00"
   docs/decisions/technical-decisions-phase-02-auth.md: "2026-05-12T12:23:19-03:00"
   docs/decisions/technical-decisions-phase-01-configuracao-base.md: "2026-05-12T12:21:12-03:00"
   docs/phases/phase-02-auth/phase-02-auth.md: "2026-05-12T12:23:19-03:00"
@@ -43,16 +43,17 @@ sources_mtime:
 
 | Ref | Source | Scope | Topic | Status | Decision | Libraries |
 |-----|--------|-------|-------|--------|----------|-----------|
-| phase-03-videos/TD-01 | technical-decisions-phase-03-videos.md | Backend | Processing Queue Technology | decided | A (BullMQ + Redis) | @nestjs/bullmq@^11.0.x, bullmq@^5.x |
-| phase-03-videos/TD-02 | technical-decisions-phase-03-videos.md | Backend | Object Storage Usage | decided | A (single private bucket, id keys, AWS SDK v3, dual endpoint) | @aws-sdk/client-s3@^3.x, @aws-sdk/s3-request-presigner@^3.x |
+| phase-03-videos/TD-01 | technical-decisions-phase-03-videos.md | Backend | Processing Queue Technology | decided | A (BullMQ + Redis) | @nestjs/bullmq@^11.0.4, bullmq@^5.76.0 |
+| phase-03-videos/TD-02 | technical-decisions-phase-03-videos.md | Backend | Object Storage Usage | decided | A (single private bucket, id keys, AWS SDK v3, dual endpoint) + R1 | @aws-sdk/client-s3@^3.x, @aws-sdk/s3-request-presigner@^3.x |
 | phase-03-videos/TD-03 | technical-decisions-phase-03-videos.md | Cross-layer | Upload Strategy for 10GB | decided | A (presigned S3 multipart) | @aws-sdk/client-s3@^3.x, @aws-sdk/s3-request-presigner@^3.x |
 | phase-03-videos/TD-04 | technical-decisions-phase-03-videos.md | Backend | Upload Limits and Validation | decided | A (declared + HeadObject + ffprobe, 64 MiB parts) | — |
-| phase-03-videos/TD-05 | technical-decisions-phase-03-videos.md | Backend | Worker Runtime and Media Tooling | decided | A (same codebase, 2nd entrypoint, ffmpeg CLI) | ffmpeg (Debian package in image) |
+| phase-03-videos/TD-05 | technical-decisions-phase-03-videos.md | Backend | Worker Runtime and Media Tooling | decided | A (same codebase, 2nd entrypoint, ffmpeg CLI) + R1 | ffmpeg (Debian package in image) |
 | phase-03-videos/TD-06 | technical-decisions-phase-03-videos.md | Cross-layer | Unique Video URL Identifier | decided | A (11-char random slug, unique index) | — |
 | phase-03-videos/TD-07 | technical-decisions-phase-03-videos.md | Cross-layer | Streaming and Download Delivery | decided | A (302 to presigned GET) | @aws-sdk/s3-request-presigner@^3.x |
-| phase-03-videos/TD-08 | technical-decisions-phase-03-videos.md | Backend | Status Lifecycle and Failure Handling | decided | A (draft→processing→ready/error) | bullmq@^5.x |
+| phase-03-videos/TD-08 | technical-decisions-phase-03-videos.md | Backend | Status Lifecycle and Failure Handling | decided | A (draft→processing→ready/error) + R1 | bullmq@^5.76.0 |
 | phase-03-videos/TD-09 | technical-decisions-phase-03-videos.md | Backend | Access Policy for Reads in Phase 03 | decided | A (owner-only) | — |
 | phase-03-videos/TD-10 | technical-decisions-phase-03-videos.md | Repo-wide | Compose Topology and Env Contract | decided | A (minio + minio-init + redis + video-worker) | — |
+| phase-03-videos/TD-11 | technical-decisions-phase-03-videos.md | Backend | Persisted Video Metadata Shape | decided | A (duration column + curated jsonb) | — |
 
 _Source files:_
 
@@ -66,7 +67,7 @@ _Source files:_
 | Serviço de processamento em segundo plano (filas) | phase-03-videos/TD-01, phase-03-videos/TD-10 |
 | Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance | phase-03-videos/TD-03, phase-03-videos/TD-04 |
 | Pré-cadastro automático do vídeo como rascunho ao iniciar o upload | phase-03-videos/TD-08 |
-| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-videos/TD-05, phase-03-videos/TD-08 |
+| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-videos/TD-05, phase-03-videos/TD-08, phase-03-videos/TD-11 |
 | Geração automática de thumbnail a partir de um frame do vídeo | phase-03-videos/TD-05 |
 | URL única por vídeo, sem conflito com outros vídeos | phase-03-videos/TD-06 |
 | Reprodução via streaming (sem necessidade de download completo) | phase-03-videos/TD-07, phase-03-videos/TD-09 |
@@ -78,11 +79,13 @@ _Source files:_
 
 **Recommendation:** Option A (BullMQ + Redis) — the only option with official NestJS support and built-in retry/backoff/idempotency, which TD-08 (failure handling) depends on; the dual-write risk of Option C's advantage is handled by TD-08's ordering rule.
 
-**Libraries:** `@nestjs/bullmq@^11.0.x`, `bullmq@^5.x`
+**Libraries:** `@nestjs/bullmq@^11.0.4`, `bullmq@^5.76.0`
 
 ### phase-03-videos/TD-02
 
 **Recommendation:** Option A — one private bucket with id-derived keys and the AWS SDK v3 keeps local MinIO and production S3 identical, and the explicit public endpoint avoids the known SigV4 host mismatch in Docker.
+
+**Revision R1:** client-facing URLs are signed with the public client; URLs consumed inside Docker (worker input) are signed with the internal client; in tests `S3_PUBLIC_ENDPOINT=http://minio:9000`.
 
 **Libraries:** `@aws-sdk/client-s3@^3.x`, `@aws-sdk/s3-request-presigner@^3.x`
 
@@ -102,6 +105,8 @@ _Source files:_
 
 **Recommendation:** Option A — one codebase, a dedicated container, direct FFmpeg CLI calls and HTTP-range reads give a real worker without duplicating the domain or adopting a deprecated wrapper.
 
+**Revision R1:** thumbnail at `t = min(duration × 0.1, 10s)` (0 when duration < 1s or unknown), JPEG width 640, key `thumbnails/{videoId}/thumbnail.jpg`.
+
 **Libraries:** `ffmpeg`/`ffprobe` binaries from the Debian package installed in `Dockerfile.dev`
 
 ### phase-03-videos/TD-06
@@ -120,7 +125,9 @@ _Source files:_
 
 **Recommendation:** Option A — the complete call already exists in the multipart flow, so it is the natural trigger; ordering (status then enqueue, fail-to-error) plus idempotent job id and conditional worker updates cover the dual-write risk without an outbox.
 
-**Libraries:** `bullmq@^5.x`
+**Revision R1:** `status` holds only the upload/processing state; publication/visibility belongs to Phase 04.
+
+**Libraries:** `bullmq@^5.76.0`
 
 ### phase-03-videos/TD-09
 
@@ -131,6 +138,12 @@ _Source files:_
 ### phase-03-videos/TD-10
 
 **Recommendation:** Option A — a single image and an init container keep setup to one command and let every test level run against the real services.
+
+**Libraries:** —
+
+### phase-03-videos/TD-11
+
+**Recommendation:** Option A — duration as a column plus a curated jsonb subset (`width, height, videoCodec, audioCodec, bitRate, frameRate, formatName, sizeBytes`) balances queryability and stability.
 
 **Libraries:** —
 
@@ -183,8 +196,8 @@ _No capability of this phase is deferred._ (The video UI is not a Phase 03 capab
 
 ## Open Questions
 
-- OQ-1: The Phase 03 status `draft` (pre-registration during upload) and the Phase 04 capability "Fluxo de rascunho → publicação" use the same word. Does the `status` column also carry publication state?
-- OQ-2: Integration/E2E tests run inside the `nestjs-api` container, where the public endpoint (`localhost:9000`) is not reachable. How do tests use presigned URLs?
+- ~~OQ-1~~ — resolved by `phase-03-videos/TD-08` R1: `status` is processing state only; publication is Phase 04.
+- ~~OQ-2~~ — resolved by `phase-03-videos/TD-02` R1: tests set `S3_PUBLIC_ENDPOINT=http://minio:9000`.
 
 ## Testing Requirements
 

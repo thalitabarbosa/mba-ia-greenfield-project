@@ -1,13 +1,14 @@
 ---
 kind: phase
 name: phase-03-videos
-status: dirty
-issue_count: 6
+status: clean
+issue_count: 0
 sources_mtime:
-  docs/phases/phase-03-videos/context.md: "2026-11-11T09:10:00-03:00"
-  docs/decisions/technical-decisions-phase-03-videos.md: "2026-11-11T09:05:00-03:00"
-issues: [IC-1, AM-1, MD-1, DG-1, UQ-1, UQ-2]
-advisories: []
+  docs/phases/phase-03-videos/context.md: "2026-11-11T09:25:00-03:00"
+  docs/decisions/technical-decisions-phase-03-videos.md: "2026-11-11T09:20:00-03:00"
+  docs/phases/phase-03-videos/library-refs.md: "2026-11-11T09:20:00-03:00"
+issues: []
+advisories: [ADV-1]
 ---
 
 # phase-03-videos — Validation
@@ -16,33 +17,43 @@ advisories: []
 
 ### Inconsistencies
 
-- **IC-1** — `phase-03-videos/TD-02` states that presigned URLs are signed by the *public* client (`S3_PUBLIC_ENDPOINT=http://localhost:9000`), while `phase-03-videos/TD-05` has the worker read the source through a presigned GET URL. Inside the `video-worker` container `localhost:9000` is the container itself, so ffprobe/ffmpeg would fail. The decision must say which client signs which URL.
+_None._
 
 ### Ambiguities
 
-- **AM-1** — `phase-03-videos/TD-05` picks the thumbnail frame at "10% of duration, capped, 0 for very short videos" without the cap value or the "very short" threshold. The worker unit tests cannot assert behavior without numbers.
+_None._
 
 ### Missing Decisions
 
-- **MD-1** — Capability "Processamento automático do vídeo após upload (extração de duração e metadados)" is covered by TD-05/TD-08, but no TD fixes *which* metadata is persisted and in what shape (columns vs JSON). This is a cross-component contract (worker writes it, API returns it, migration defines it).
+_None._ Every capability in `## Capability Coverage` maps to at least one decided TD.
 
 ### Dependency Gaps
 
-- **DG-1** — No `library-refs.md` exists for the new libraries (`@nestjs/bullmq`, `bullmq`, `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`). BullMQ published a new major (v6.0.0, 2026-07-30) with breaking changes (e.g., `Worker#resume()` became async); compatibility with `@nestjs/bullmq@11` must be pinned before planning.
+_None._
 
 ### Inherited Constraint Conflicts
 
-_None._
+_None._ New endpoints keep the global `JwtAuthGuard` (phase-02-auth/TD-02), DTO validation (TD-06) and the `DomainException` error contract (TD-07); new config follows `registerAs` + Joi (phase-01).
 
 ### Unresolved Open Questions
 
-- **UQ-1** — context.md OQ-1: does `status = draft` also mean "not published"? Risk of colliding with Phase 04's draft → publication flow.
-- **UQ-2** — context.md OQ-2: tests run inside `nestjs-api`; presigned URLs signed for `localhost:9000` are unreachable there.
+_None._
 
 ### UI Coverage Gaps
 
 _None._ (`next-frontend/` not in scope.)
 
+### Advisories
+
+- **ADV-1** — `library-refs.md` was sourced from official docs via web because context7 was not available in the planning session. Non-blocking: re-confirm with context7 against the installed versions at the start of SI-03.1 (first install step).
+
 ## Resolved Issues
 
-_No issues resolved yet._
+| Issue | Pass | Resolution |
+|-------|------|------------|
+| IC-1 — signing client for worker URLs | 1 | `phase-03-videos/TD-02` R1: internal client signs URLs consumed inside Docker; public client signs client-facing URLs |
+| AM-1 — thumbnail timestamp undefined | 1 | `phase-03-videos/TD-05` R1: `t = min(duration × 0.1, 10s)`, 0 when < 1s; JPEG width 640 |
+| MD-1 — metadata shape not decided | 1 | New `phase-03-videos/TD-11` (decided A): `duration_seconds` column + curated `metadata` jsonb |
+| DG-1 — libraries not pinned / BullMQ v6 | 1 | `library-refs.md` created; `bullmq@^5.76.0` pinned below v6, `@nestjs/bullmq@^11.0.4`, AWS SDK v3 |
+| UQ-1 — `draft` vs Phase 04 publication | 1 | `phase-03-videos/TD-08` R1: `status` is processing state only |
+| UQ-2 — presigned URLs inside test container | 1 | `phase-03-videos/TD-02` R1: tests use `S3_PUBLIC_ENDPOINT=http://minio:9000` |
