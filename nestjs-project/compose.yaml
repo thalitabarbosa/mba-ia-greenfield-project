@@ -70,8 +70,10 @@ services:
       timeout: 5s
       retries: 5
 
+  # MinIO removed its images from Docker Hub/Quay (Sept 2026). Silo is a
+  # maintained MinIO fork with the same CLI, env vars and S3 API, and ships `mc`.
   minio:
-    image: minio/minio
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
     command: ["server", "/data", "--console-address", ":9001"]
     ports:
       - "9000:9000"
@@ -81,6 +83,8 @@ services:
       - MINIO_ROOT_PASSWORD=streamtube-secret
       # Browser uploads PUT parts directly to MinIO and must read the ETag header.
       - MINIO_API_CORS_ALLOW_ORIGIN=*
+      # Alias used by the healthcheck (`mc ready local`).
+      - MC_HOST_local=http://streamtube:streamtube-secret@localhost:9000
     volumes:
       - minio-data:/data
     healthcheck:
@@ -90,7 +94,7 @@ services:
       retries: 10
 
   minio-init:
-    image: minio/mc
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
     depends_on:
       minio:
         condition: service_healthy

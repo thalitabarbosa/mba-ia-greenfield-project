@@ -38,8 +38,8 @@ Services:
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
 - `mailpit` — SMTP `1025`, web UI `8025`
 - `redis` — Redis 7 (AOF on), port `6379` — BullMQ broker
-- `minio` — S3-compatible storage, API `9000`, console `9001` (user `streamtube` / `streamtube-secret`)
-- `minio-init` — one-shot `mc` container that creates the `streamtube` bucket, then exits
+- `minio` — S3-compatible storage (`pgsty/silo` image, a maintained MinIO fork: official MinIO images were removed from Docker Hub), API `9000`, console `9001` (user `streamtube` / `streamtube-secret`)
+- `minio-init` — one-shot container (same image, bundled `mc`) that creates the `streamtube` bucket, then exits
 - `video-worker` — same image/volume as `nestjs-api`; runs `npm run start:worker` (`src/worker.ts`, no HTTP server). It waits until `node_modules` exists, so run `npm install` in `nestjs-api` first. Logs: `docker compose logs -f video-worker`. Restart it after changing worker code: `docker compose restart video-worker`.
 
 All verification and teardown commands run on the **host machine**:

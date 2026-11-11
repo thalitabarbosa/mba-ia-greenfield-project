@@ -331,6 +331,10 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Decision:** A (minio + minio-init + redis + video-worker, same image with ffmpeg)
 
+
+**Revisions:**
+
+- **R1 (2026-11-11, implement SI-03.1):** `minio/minio` and `minio/mc` no longer exist on Docker Hub (removed by MinIO in Sept 2026; Quay requires an account). Both `minio` and `minio-init` use `pgsty/silo:RELEASE.2026-10-26T00-00-00Z`, a maintained MinIO fork with the same server CLI, `MINIO_*` env vars, S3 API and a bundled `mc`. Option letter unchanged; production still targets S3.
 ---
 
 ## TD-11: Persisted Video Metadata Shape
