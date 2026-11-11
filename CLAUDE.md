@@ -20,11 +20,22 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 
 - **Frontend** (Next.js) → calls API via REST, streams from Object Storage
 - **API** (Nest.js) → business rules, auth, reads/writes DB, uploads to storage, publishes jobs to queue, sends emails
-- **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
+- **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage — runs as the `video-worker` Compose service from the same `nestjs-project/` codebase (`src/worker.ts`)
 - **Database** (PostgreSQL) → users, channels, videos, comments, likes
 - **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Message Queue** (BullMQ on Redis) → video processing job queue (`video-processing`)
 - **Email Service** (SMTP) → account confirmation and password recovery
+
+## Videos (Phase 03)
+
+Implemented in `nestjs-project/` — decisions in `docs/decisions/technical-decisions-phase-03-videos.md`, plan and progress in `docs/phases/phase-03-videos/`.
+
+- **Upload (up to 10 GiB):** the API never receives video bytes. `POST /videos/uploads` pre-registers the video as `draft` and returns presigned S3 multipart part URLs; the client PUTs each part directly to MinIO/S3 and calls `POST /videos/:id/upload/complete` with the part ETags. `DELETE /videos/:id/upload` aborts a draft.
+- **Processing:** completion verifies the object size, sets `processing` and enqueues job `video.process` (BullMQ, Redis, `jobId = videoId`, 3 attempts, exponential backoff). The worker runs `ffprobe`/`ffmpeg` over an internal presigned URL, stores duration + metadata and a JPEG thumbnail, and sets `ready`; the last failed attempt sets `error` with `error_reason`.
+- **Status cycle:** `draft → processing → ready | error` (processing state only; publication/visibility is Phase 04).
+- **Unique URL:** each video has an 11-char random `slug` (unique index).
+- **Streaming / download:** `GET /videos/:slug/stream`, `/download` and `/thumbnail` answer `302` to short-lived presigned storage URLs; storage serves HTTP Range (`206`). In Phase 03 every `/videos` route is owner-only.
+- **Storage layout:** single private bucket `streamtube`; keys `videos/{videoId}/original` and `thumbnails/{videoId}/thumbnail.jpg`. URLs for clients are signed with `S3_PUBLIC_ENDPOINT`; URLs consumed inside Docker with `S3_ENDPOINT`.
 
 ## Docker Networking
 

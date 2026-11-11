@@ -1,6 +1,6 @@
 services:
   nestjs-api:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.dev
     ports:
@@ -12,6 +12,31 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    # Dependencies are installed once from nestjs-api (shared volume); the worker waits for them.
+    command: ["sh", "-c", "until [ -x node_modules/.bin/ts-node ] && [ -d node_modules/bullmq ]; do echo 'video-worker: waiting for npm install in nestjs-api'; sleep 5; done; npm run start:worker"]
+    restart: unless-stopped
+    volumes:
+      - .:/home/node/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
 
   db:
     image: postgres:17
@@ -33,4 +58,54 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  # MinIO removed its images from Docker Hub/Quay (Sept 2026). Silo is a
+  # maintained MinIO fork with the same CLI, env vars and S3 API, and ships `mc`.
+  minio:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=streamtube
+      - MINIO_ROOT_PASSWORD=streamtube-secret
+      # Browser uploads PUT parts directly to MinIO and must read the ETag header.
+      - MINIO_API_CORS_ALLOW_ORIGIN=*
+      # Alias used by the healthcheck (`mc ready local`).
+      - MC_HOST_local=http://streamtube:streamtube-secret@localhost:9000
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 streamtube streamtube-secret &&
+      mc mb --ignore-existing local/streamtube &&
+      echo 'bucket streamtube ready'
+      "
+
+volumes:
+  redis-data:
+  minio-data:

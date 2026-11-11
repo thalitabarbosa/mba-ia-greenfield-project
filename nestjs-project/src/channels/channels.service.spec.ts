@@ -1,4 +1,5 @@
 import { QueryFailedError } from 'typeorm';
+import { ChannelNotFoundException } from '../common/exceptions/domain.exception';
 import { ChannelsService } from './channels.service';
 import { Channel } from './entities/channel.entity';
 
@@ -130,6 +131,31 @@ describe('ChannelsService', () => {
         service.createChannel('user-id', 'carol@example.com'),
       ).rejects.toThrow('Connection lost');
       expect(manager.save).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('findByUserId', () => {
+    it('returns the channel owned by the user', async () => {
+      const channel = makeChannel('owner');
+      const findOne = jest.fn().mockResolvedValue(channel);
+      const service = new ChannelsService({
+        getRepository: jest.fn().mockReturnValue({ findOne }),
+      } as any);
+
+      await expect(service.findByUserId('user-id')).resolves.toBe(channel);
+      expect(findOne).toHaveBeenCalledWith({ where: { user_id: 'user-id' } });
+    });
+
+    it('throws ChannelNotFoundException when the user has no channel', async () => {
+      const service = new ChannelsService({
+        getRepository: jest
+          .fn()
+          .mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) }),
+      } as any);
+
+      await expect(service.findByUserId('user-id')).rejects.toBeInstanceOf(
+        ChannelNotFoundException,
+      );
     });
   });
 });
