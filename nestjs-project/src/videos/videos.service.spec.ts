@@ -114,7 +114,7 @@ describe('VideosService (unit)', () => {
 
       expect(videos.save).toHaveBeenCalledTimes(2);
       const [first, second] = videos.create.mock.calls.map(
-        ([data]) => (data as Partial<Video>).slug,
+        ([data]) => data.slug,
       );
       expect(first).not.toBe(second);
     });
