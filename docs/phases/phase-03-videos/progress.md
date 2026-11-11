@@ -1,7 +1,15 @@
 # phase-03-videos — Progress
 
-**Status:** in_progress — code complete for all SIs; test execution pending
-**SIs:** 10/10 implemented, 0/10 verified (suite not yet executed)
+**Status:** in_progress — first full run on the developer machine done; fixes applied, re-run pending
+**SIs:** 10/10 implemented
+
+### Run 1 — 2026-11-11 (developer machine, Docker Desktop)
+- Infra: `db`, `mailpit`, `redis`, `minio` (silo) healthy; `minio-init` exited 0; ffmpeg 5.1 present in `nestjs-api`.
+- Migrations: 3/3 applied (`CreateVideos` included). `migration:generate` → "No changes in database schema" (hand-written migration matches the entities).
+- Unit + integration: **206/210 passing, 38/39 suites.** All Phase 03 suites green against real MinIO/Redis/ffmpeg/Postgres. Only failure: `auth.service.integration-spec.ts` `beforeAll` exceeded Jest's 5 s default on a cold run → global `testTimeout: 30000`.
+- `tsc`: 1 error (`Buffer` not assignable to fetch `BodyInit` in `src/test/storage-test.utils.ts`) → fixed with `Uint8Array.from(body)`.
+- e2e: did not start — `setupFiles` path wrong for `test/jest-e2e.json` (rootDir is `test/`) → fixed. `video-worker` crashed with `ts-node: not found` because it started while `npm install` was still linking binaries → waits for `node_modules/.bin/ts-node`, plus `restart: unless-stopped`.
+- Lint: 188 errors, almost all in Phase 01–02 test files (pre-existing baseline). Fixed with a test-files override for the type-unsafe rules and real fixes in shared code (`channels.service.ts`, `create-test-data-source.ts`, two unused vars).
 
 > **Why "pending":** the implementation session had no npm registry access and no Docker, so dependencies could not be installed and no test, `tsc` or lint command could run. Each SI below lists the tests written for it. An SI moves to `completed` only after its tests run green inside `nestjs-api` (`docker compose exec nestjs-api npm test -- <files> --runInBand`), following the Definition of Done in `CLAUDE.md`.
 
