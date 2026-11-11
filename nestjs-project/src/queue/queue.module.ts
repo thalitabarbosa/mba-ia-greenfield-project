@@ -4,6 +4,10 @@ import { BullModule } from '@nestjs/bullmq';
 import queueConfig from '../config/queue.config';
 import { VIDEO_PROCESSING_QUEUE } from './queue.constants';
 
+const videoProcessingQueue = BullModule.registerQueue({
+  name: VIDEO_PROCESSING_QUEUE,
+});
+
 /** Redis connection + the `video-processing` queue, shared by API and worker. */
 @Module({
   imports: [
@@ -13,8 +17,8 @@ import { VIDEO_PROCESSING_QUEUE } from './queue.constants';
         connection: { host: cfg.redisHost, port: cfg.redisPort },
       }),
     }),
-    BullModule.registerQueue({ name: VIDEO_PROCESSING_QUEUE }),
+    videoProcessingQueue,
   ],
-  exports: [BullModule],
+  exports: [videoProcessingQueue],
 })
 export class QueueModule {}
