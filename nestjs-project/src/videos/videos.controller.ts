@@ -17,6 +17,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { JwtPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiErrorEnvelope } from '../common/openapi/api-error-envelope.dto';
@@ -30,7 +31,12 @@ import { VideosService } from './videos.service';
 
 const errorSchema = { $ref: getSchemaPath(ApiErrorEnvelope) };
 
-/** All routes are owner-only in Phase 03 (TD-09) — no @Public(). */
+/**
+ * All routes are owner-only in Phase 03 (TD-09) — no @Public().
+ * The ThrottlerGuard registered by AuthModule is global; its 10 req/min limit
+ * targets auth endpoints (phase-02-auth/TD-08), so videos opt out.
+ */
+@SkipThrottle()
 @ApiTags('videos')
 @ApiBearerAuth('access-token')
 @ApiResponse({ status: 401, description: 'Missing or invalid access token', schema: errorSchema })
