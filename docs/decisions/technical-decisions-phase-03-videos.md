@@ -1,7 +1,7 @@
 ---
 scope_type: phase
 related_phases: [3]
-status: pending
+status: decided
 date: 2026-11-11
 scope_description: "Backend foundation for video upload and processing: object storage usage (MinIO/S3), processing queue technology, direct-to-storage upload of files up to 10GB, draft pre-registration, background FFmpeg worker (metadata + thumbnail), unique video URL, streaming and download, and the video status lifecycle."
 ---
@@ -44,7 +44,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A (BullMQ + Redis)** — the only option with official NestJS support and built-in retry/backoff/idempotency, which TD-08 (failure handling) depends on; the dual-write risk of Option C's advantage is handled by TD-08's ordering rule.
 
-**Decision:** _[pending]_
+**Decision:** A (BullMQ + Redis)
 
 ---
 
@@ -75,7 +75,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — one private bucket with id-derived keys and the AWS SDK v3 keeps local MinIO and production S3 identical, and the explicit public endpoint avoids the known SigV4 host mismatch in Docker.
 
-**Decision:** _[pending]_
+**Decision:** A (single private bucket, id-derived keys, AWS SDK v3, internal + public endpoints)
 
 ---
 
@@ -106,7 +106,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — it is the only option where the API is fully out of the data path, which is literally what "sem impacto na performance" requires; resumability is achieved at part granularity.
 
-**Decision:** _[pending]_
+**Decision:** A (direct-to-storage S3 multipart upload with presigned part URLs)
 
 ---
 
@@ -132,7 +132,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — fixed 64 MiB parts stay far from S3's 10,000-part ceiling and the HeadObject + ffprobe double check covers the cases the API cannot see.
 
-**Decision:** _[pending]_
+**Decision:** A (declared limits at init, HeadObject at complete, ffprobe in worker; fixed 64 MiB parts)
 
 ---
 
@@ -163,7 +163,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — one codebase, a dedicated container, direct FFmpeg CLI calls and HTTP-range reads give a real worker without duplicating the domain or adopting a deprecated wrapper.
 
-**Decision:** _[pending]_
+**Decision:** A (same codebase, `src/worker.ts` entrypoint, ffprobe/ffmpeg via spawn over presigned GET URL)
 
 ---
 
@@ -192,7 +192,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — a DB-enforced unique random slug gives conflict-free, stable, short URLs independent of title edits.
 
-**Decision:** _[pending]_
+**Decision:** A (11-char base64url random slug, unique index, retry on collision)
 
 ---
 
@@ -223,7 +223,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — redirect to presigned URLs keeps media traffic off the API while giving native Range/206 playback and attachment downloads.
 
-**Decision:** _[pending]_
+**Decision:** A (302 redirect to short-lived presigned GET URL)
 
 ---
 
@@ -254,7 +254,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — the complete call already exists in the multipart flow, so it is the natural trigger; ordering (status then enqueue, fail-to-error) plus idempotent job id and conditional worker updates cover the dual-write risk without an outbox.
 
-**Decision:** _[pending]_
+**Decision:** A (draft → processing → ready | error; complete-triggered; BullMQ retries; idempotent job)
 
 ---
 
@@ -280,7 +280,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — keeps Phase 03 within its capabilities and leaves visibility/anonymous access to the phases that own them.
 
-**Decision:** _[pending]_
+**Decision:** A (owner-only in Phase 03)
 
 ---
 
@@ -305,7 +305,7 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 **Recommendation:** **Option A** — a single image and an init container keep setup to one command and let every test level run against the real services.
 
-**Decision:** _[pending]_
+**Decision:** A (minio + minio-init + redis + video-worker, same image with ffmpeg)
 
 ---
 
@@ -313,13 +313,13 @@ Inherited constraints (not reopened): NestJS 11 + TypeORM 0.3 + PostgreSQL 17 (`
 
 | ID | Scope | Decision | Recommendation | Choice |
 |----|-------|----------|---------------|--------|
-| TD-01 | Backend | Processing Queue Technology | A (BullMQ + Redis) | _[pending]_ |
-| TD-02 | Backend | Object Storage Usage | A (single private bucket, id keys, AWS SDK v3, dual endpoint) | _[pending]_ |
-| TD-03 | Cross-layer | Upload Strategy for 10GB | A (presigned S3 multipart, direct to storage) | _[pending]_ |
-| TD-04 | Backend | Upload Limits and Validation | A (declared + HeadObject + ffprobe, 64 MiB parts) | _[pending]_ |
-| TD-05 | Backend | Worker Runtime and Media Tooling | A (same codebase, 2nd entrypoint, ffmpeg CLI over presigned URL) | _[pending]_ |
-| TD-06 | Cross-layer | Unique Video URL Identifier | A (11-char random slug, unique index) | _[pending]_ |
-| TD-07 | Cross-layer | Streaming and Download Delivery | A (302 to presigned GET) | _[pending]_ |
-| TD-08 | Backend | Status Lifecycle and Failure Handling | A (draft→processing→ready/error, complete-triggered, retries) | _[pending]_ |
-| TD-09 | Backend | Access Policy for Reads in Phase 03 | A (owner-only) | _[pending]_ |
-| TD-10 | Repo-wide | Compose Topology and Env Contract | A (minio + minio-init + redis + video-worker, same image) | _[pending]_ |
+| TD-01 | Backend | Processing Queue Technology | A (BullMQ + Redis) | A |
+| TD-02 | Backend | Object Storage Usage | A (single private bucket, id keys, AWS SDK v3, dual endpoint) | A |
+| TD-03 | Cross-layer | Upload Strategy for 10GB | A (presigned S3 multipart, direct to storage) | A |
+| TD-04 | Backend | Upload Limits and Validation | A (declared + HeadObject + ffprobe, 64 MiB parts) | A |
+| TD-05 | Backend | Worker Runtime and Media Tooling | A (same codebase, 2nd entrypoint, ffmpeg CLI over presigned URL) | A |
+| TD-06 | Cross-layer | Unique Video URL Identifier | A (11-char random slug, unique index) | A |
+| TD-07 | Cross-layer | Streaming and Download Delivery | A (302 to presigned GET) | A |
+| TD-08 | Backend | Status Lifecycle and Failure Handling | A (draft→processing→ready/error, complete-triggered, retries) | A |
+| TD-09 | Backend | Access Policy for Reads in Phase 03 | A (owner-only) | A |
+| TD-10 | Repo-wide | Compose Topology and Env Contract | A (minio + minio-init + redis + video-worker, same image) | A |
